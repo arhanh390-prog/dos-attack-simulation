@@ -62,8 +62,11 @@ def process_server_load():
     
     # 1. Process existing load
     if st.session_state.server_load > 0:
-        # Simplified: Normal processing, 10% of load per tick
-        processed = max(1, int(st.session_state.server_load * 0.1)) # Process 10%
+        # --- FIXED LOGIC ---
+        # The server processes a fixed amount based on its *capacity*, 
+        # not a percentage of the *current load*.
+        # Let's say it can process 25% of its capacity per tick.
+        processed = max(1, int(st.session_state.server_capacity * 0.25))
         st.session_state.server_load = max(0, st.session_state.server_load - processed)
         
         if st.session_state.server_load == 0 and not st.session_state.attack_running:
