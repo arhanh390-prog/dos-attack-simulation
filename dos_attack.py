@@ -86,11 +86,13 @@ with col_attacker:
         else:
             add_log("Server max capacity reached. Dropping packets.", "attack")
         
-        st.session_state.server_status = "🔥 UNDER ATTACK"
+        # This line is no longer needed, server column handles status display
+        # st.session_state.server_status = "🔥 UNDER ATTACK" 
     else:
         st.info("Attacker is Idle.")
-        if st.session_state.server_status == "🔥 UNDER ATTACK" and st.session_state.server_load == 0:
-             st.session_state.server_status = "✅ Idle"
+        # This logic is now handled by the server column
+        # if st.session_state.server_status == "🔥 UNDER ATTACK" and st.session_state.server_load == 0:
+        #      st.session_state.server_status = "✅ Idle"
 
 
 # --- 2. Server Column ---
@@ -100,19 +102,22 @@ with col_server:
     # Server Status & Load
     load_percent = min(1.0, st.session_state.server_load / SERVER_CAPACITY)
     
-    if load_percent > 0.8:
-        st.session_state.server_status = "🆘 Overloaded" if not st.session_state.attack_running else "🔥 UNDER ATTACK"
+    # --- UPDATED STATUS LOGIC ---
+    # Check for attack status FIRST
+    if st.session_state.attack_running:
+        st.session_state.server_status = "🔥 UNDER ATTACK"
+        st.error(f"Status: {st.session_state.server_status}")
+    # If no attack, then check load
+    elif load_percent > 0.8:
+        st.session_state.server_status = "🆘 Overloaded"
         st.error(f"Status: {st.session_state.server_status}")
     elif load_percent > 0.5:
         st.session_state.server_status = "⚠️ High Load"
         st.warning(f"Status: {st.session_state.server_status}")
     else:
         st.session_state.server_status = "✅ Stable" if st.session_state.server_load > 0 else "✅ Idle"
-        if not st.session_state.attack_running:
-            st.success(f"Status: {st.session_state.server_status}")
-        else:
-            # Still show attack status if load is low but attack is on
-            st.error(f"Status: {st.session_state.server_status} (Attack Detected)")
+        st.success(f"Status: {st.session_state.server_status}")
+    # --- END UPDATED STATUS LOGIC ---
 
 
     st.markdown(f"**Current Load:** `{st.session_state.server_load}` / `{SERVER_CAPACITY}`")
