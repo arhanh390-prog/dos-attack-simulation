@@ -182,16 +182,20 @@ with col_server:
     st.session_state.rate_limiting_enabled = st.toggle("Enable Rate Limiting (Firewall)", value=st.session_state.rate_limiting_enabled)
     st.session_state.auto_scaling_enabled = st.toggle("Enable Cloud Auto-Scaling", value=st.session_state.auto_scaling_enabled)
     
-    # Only show 'Block' button if not already blocked
-    if not st.session_state.attacker_blocked:
-        if st.button("🚨 BLOCK ATTACKER IP 🚨"):
-            st.session_state.attacker_blocked = True
-            add_log("Firewall rule added: Attacker IP BLOCKED.", "defense")
-    
-    # Only show 'Unblock' button if blocked
+    # Single button to Block/Unblock
     if st.session_state.attacker_blocked:
-        if st.button("🟢 UNBLOCK ATTACKER IP 🟢"):
-            st.session_state.attacker_blocked = False
+        button_text = "🟢 UNBLOCK ATTACKER IP 🟢"
+    else:
+        button_text = "🚨 BLOCK ATTACKER IP 🚨"
+
+    if st.button(button_text):
+        # Toggle the blocked state
+        st.session_state.attacker_blocked = not st.session_state.attacker_blocked
+        
+        # Add the appropriate log
+        if st.session_state.attacker_blocked:
+            add_log("Firewall rule added: Attacker IP BLOCKED.", "defense")
+        else:
             add_log("Firewall rule removed: Attacker IP UNBLOCKED.", "defense")
 
 # --- 3. Authentic User Column ---
