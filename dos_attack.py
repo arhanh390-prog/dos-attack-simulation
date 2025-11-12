@@ -62,15 +62,8 @@ def process_server_load():
     
     # 1. Process existing load
     if st.session_state.server_load > 0:
-        # Check for attack type to determine processing speed
-        if st.session_state.attack_type == "Slow Connection Attack" and st.session_state.attack_running:
-            # Slow attacks clog the server: process much less load
-            processed = max(1, int(st.session_state.server_load * 0.02)) # Process only 2%
-            add_log("Slow attack detected. Request processing is sluggish.", "attack")
-        else:
-            # Normal processing
-            processed = max(1, int(st.session_state.server_load * 0.1)) # Process 10%
-        
+        # Simplified: Normal processing, 10% of load per tick
+        processed = max(1, int(st.session_state.server_load * 0.1)) # Process 10%
         st.session_state.server_load = max(0, st.session_state.server_load - processed)
         
         if st.session_state.server_load == 0 and not st.session_state.attack_running:
@@ -122,8 +115,10 @@ with col_attacker:
             fake_requests = random.randint(1, ATTACK_STRENGTH) * st.session_state.num_bots
             add_log(f"Botnet injecting {fake_requests} 'Volume' requests.", "attack")
         else: # Slow Connection Attack
-            fake_requests = st.session_state.num_bots # Fewer requests, but they clog the server
-            add_log(f"Botnet initiating {fake_requests} 'Slow Connection' requests.", "attack")
+            # Each "slow" bot consumes more server resources (e.g., 10 units)
+            load_impact_per_bot = 10 
+            fake_requests = st.session_state.num_bots * load_impact_per_bot
+            add_log(f"Botnet initiating {st.session_state.num_bots} 'Slow' requests, consuming {fake_requests} load units.", "attack")
 
         # 2. Check for Rate Limiting
         accepted_requests = fake_requests
