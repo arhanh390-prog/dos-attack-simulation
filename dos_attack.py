@@ -179,8 +179,10 @@ with col_server:
 
     # Defense Panel
     st.subheader("🛡️ Defense Panel")
-    st.session_state.rate_limiting_enabled = st.toggle("Enable Rate Limiting (Firewall)", value=st.session_state.rate_limiting_enabled)
-    st.session_state.auto_scaling_enabled = st.toggle("Enable Cloud Auto-Scaling", value=st.session_state.auto_scaling_enabled)
+    # Use the 'key' parameter to directly bind the toggle to session_state
+    # This is more robust than manual assignment, especially with st.rerun()
+    st.toggle("Enable Rate Limiting (Firewall)", key="rate_limiting_enabled")
+    st.toggle("Enable Cloud Auto-Scaling", key="auto_scaling_enabled")
     
     # Single button to Block/Unblock
     if st.session_state.attacker_blocked:
