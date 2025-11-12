@@ -136,10 +136,7 @@ with col_attacker:
     
     else:
         st.info("Attacker is Idle.")
-        if st.session_state.attacker_blocked:
-            if st.button("Reset Block (Simulate New IP)"):
-                st.session_state.attacker_blocked = False
-                add_log("Attacker is using a new IP.", "attack")
+        # Removed 'Reset Block' button from here, moved 'Unblock' to server column
 
 
 # --- 2. Server & Defenses Column ---
@@ -185,9 +182,17 @@ with col_server:
     st.session_state.rate_limiting_enabled = st.toggle("Enable Rate Limiting (Firewall)", value=st.session_state.rate_limiting_enabled)
     st.session_state.auto_scaling_enabled = st.toggle("Enable Cloud Auto-Scaling", value=st.session_state.auto_scaling_enabled)
     
-    if st.button("🚨 BLOCK ATTACKER IP 🚨"):
-        st.session_state.attacker_blocked = True
-        add_log("Firewall rule added: Attacker IP BLOCKED.", "defense")
+    # Only show 'Block' button if not already blocked
+    if not st.session_state.attacker_blocked:
+        if st.button("🚨 BLOCK ATTACKER IP 🚨"):
+            st.session_state.attacker_blocked = True
+            add_log("Firewall rule added: Attacker IP BLOCKED.", "defense")
+    
+    # Only show 'Unblock' button if blocked
+    if st.session_state.attacker_blocked:
+        if st.button("🟢 UNBLOCK ATTACKER IP 🟢"):
+            st.session_state.attacker_blocked = False
+            add_log("Firewall rule removed: Attacker IP UNBLOCKED.", "defense")
 
 # --- 3. Authentic User Column ---
 with col_user:
