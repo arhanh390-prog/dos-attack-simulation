@@ -1,34 +1,41 @@
 import streamlit as st
 import time
 import random
+import pandas as pd
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="DoS Attack Simulation",
+    page_title="DDoS Attack Simulation",
     page_icon="🛡️",
     layout="wide"
 )
 
 # --- Server & Simulation Parameters ---
-SERVER_CAPACITY = 20  # Max requests server can handle at once
+BASE_SERVER_CAPACITY = 20  # Max requests server can handle at once
 REQUEST_PROCESSING_TIME = 0.05  # Time to process one request
-ATTACK_STRENGTH = 5       # Number of fake requests per attacker "click"
+ATTACK_STRENGTH = 3       # Number of fake requests per bot
+RATE_LIMIT_PER_TICK = 10  # Max requests "from attacker" allowed per tick if rate limiting is on
 
 # --- Session State Initialization ---
-# This function initializes all the variables we need to keep track of.
 def init_session_state():
-    if 'server_load' not in st.session_state:
-        st.session_state.server_load = 0
-    if 'attacker_active' not in st.session_state:
-        st.session_state.attacker_active = False
-    if 'server_logs' not in st.session_state:
-        st.session_state.server_logs = []
-    if 'user_message' not in st.session_state:
-        st.session_state.user_message = ""
-    if 'server_status' not in st.session_state:
-        st.session_state.server_status = "✅ Idle"
-    if 'attack_running' not in st.session_state:
-        st.session_state.attack_running = False
+    defaults = {
+        'server_load': 0,
+        'server_capacity': BASE_SERVER_CAPACITY,
+        'server_logs': [],
+        'user_message': "",
+        'server_status': "✅ Idle",
+        'attack_running': False,
+        'num_bots': 1,
+        'rate_limiting_enabled': False,
+        'auto_scaling_enabled': False,
+        'attacker_blocked': False,
+        'attack_type': "Volume Flood",
+        'load_history': pd.DataFrame(columns=['Time', 'Server Load', 'Capacity']),
+        'simulation_time': 0,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 init_session_state()
 
@@ -37,33 +44,58 @@ init_session_state()
 def add_log(log_message, log_type="info"):
     """Adds a new message to the server logs."""
     timestamp = time.strftime("%H:%M:%S")
-    color = "gray"
-    if log_type == "attack":
-        color = "red"
-    elif log_type == "user":
-        color = "blue"
-    elif log_type == "server":
-        color = "green"
+    color_map = {
+        "attack": "red",
+        "user": "blue",
+        "server": "green",
+        "defense": "orange",
+        "info": "gray"
+    }
+    color = color_map.get(log_type, "gray")
     
     st.session_state.server_logs.insert(0, f"[{timestamp}] <span style='color:{color};'>{log_message}</span>")
-    # Keep logs from getting too long
     if len(st.session_state.server_logs) > 20:
         st.session_state.server_logs.pop()
 
 def process_server_load():
-    """Simulates the server processing its request queue."""
+    """Simulates the server processing its request queue and auto-scaling."""
+    
+    # 1. Process existing load
     if st.session_state.server_load > 0:
-        # Server processes some requests
-        processed = max(1, int(st.session_state.server_load * 0.1)) # Process 10% of load
+        # Check for attack type to determine processing speed
+        if st.session_state.attack_type == "Slow Connection Attack" and st.session_state.attack_running:
+            # Slow attacks clog the server: process much less load
+            processed = max(1, int(st.session_state.server_load * 0.02)) # Process only 2%
+            add_log("Slow attack detected. Request processing is sluggish.", "attack")
+        else:
+            # Normal processing
+            processed = max(1, int(st.session_state.server_load * 0.1)) # Process 10%
+        
         st.session_state.server_load = max(0, st.session_state.server_load - processed)
         
-        if st.session_state.server_load == 0:
+        if st.session_state.server_load == 0 and not st.session_state.attack_running:
             add_log("Server load cleared. Back to Idle.", "server")
-            st.session_state.server_status = "✅ Idle"
+
+    # 2. Handle Auto-Scaling
+    if st.session_state.auto_scaling_enabled:
+        load_percent = st.session_state.server_load / st.session_state.server_capacity
+        
+        # Scale Up
+        if load_percent > 0.9:
+            new_capacity = st.session_state.server_capacity + BASE_SERVER_CAPACITY
+            st.session_state.server_capacity = new_capacity
+            add_log(f"Auto-scaling UP! New capacity: {new_capacity}", "server")
+        
+        # Scale Down
+        elif load_percent < 0.3 and st.session_state.server_capacity > BASE_SERVER_CAPACITY:
+            # Only scale down if load is low and we're not at base capacity
+            new_capacity = max(BASE_SERVER_CAPACITY, st.session_state.server_capacity - BASE_SERVER_CAPACITY)
+            st.session_state.server_capacity = new_capacity
+            add_log(f"Auto-scaling DOWN. New capacity: {new_capacity}", "server")
 
 # --- Main App Layout ---
-st.title("🛡️ Denial of Service (DoS) Attack Simulation")
-st.markdown("This is an educational simulation to demonstrate how a DoS attack works. No real network traffic is generated.")
+st.title("🛡️ Distributed Denial of Service (DDoS) Simulation")
+st.markdown("This educational simulation demonstrates how a DDoS attack works and the effect of common defenses.")
 st.markdown("---")
 
 # --- UI Columns ---
@@ -71,44 +103,62 @@ col_attacker, col_server, col_user = st.columns(3, gap="large")
 
 # --- 1. Attacker Column ---
 with col_attacker:
-    st.header("🥷 Attacker")
-    st.markdown("The attacker floods the server with fake requests to overwhelm it.")
+    st.header("🥷 Attacker (Botnet)")
+    st.markdown("The attacker uses a botnet to flood the server with fake requests.")
     
-    st.session_state.attack_running = st.toggle("Activate Attack Bot", value=st.session_state.attack_running)
+    st.session_state.attack_type = st.selectbox("Attack Type", ["Volume Flood", "Slow Connection Attack"])
+    st.session_state.num_bots = st.slider("Number of Bots", min_value=1, max_value=100, value=st.session_state.num_bots)
+    st.session_state.attack_running = st.toggle("Activate Attack Botnet", value=st.session_state.attack_running)
     
-    if st.session_state.attack_running:
+    if st.session_state.attacker_blocked:
+        st.error("ATTACK FAILED: Your IP has been blocked by the server's firewall.")
+        st.session_state.attack_running = False
+    
+    elif st.session_state.attack_running:
         st.warning("Attack in Progress!")
-        # Simulate a continuous flood of requests
-        fake_requests = random.randint(1, ATTACK_STRENGTH)
-        if st.session_state.server_load + fake_requests <= SERVER_CAPACITY * 1.5: # Allow some over-capacity
-            st.session_state.server_load += fake_requests
-            add_log(f"Injected {fake_requests} fake requests.", "attack")
-        else:
-            add_log("Server max capacity reached. Dropping packets.", "attack")
         
-        # This line is no longer needed, server column handles status display
-        # st.session_state.server_status = "🔥 UNDER ATTACK" 
+        # 1. Calculate total requests from botnet
+        if st.session_state.attack_type == "Volume Flood":
+            fake_requests = random.randint(1, ATTACK_STRENGTH) * st.session_state.num_bots
+            add_log(f"Botnet injecting {fake_requests} 'Volume' requests.", "attack")
+        else: # Slow Connection Attack
+            fake_requests = st.session_state.num_bots # Fewer requests, but they clog the server
+            add_log(f"Botnet initiating {fake_requests} 'Slow Connection' requests.", "attack")
+
+        # 2. Check for Rate Limiting
+        accepted_requests = fake_requests
+        if st.session_state.rate_limiting_enabled:
+            accepted_requests = min(fake_requests, RATE_LIMIT_PER_TICK)
+            blocked_requests = fake_requests - accepted_requests
+            if blocked_requests > 0:
+                add_log(f"Rate limiter blocked {blocked_requests} requests.", "defense")
+        
+        # 3. Add accepted requests to server load
+        if st.session_state.server_load + accepted_requests <= st.session_state.server_capacity * 1.5: # Allow some over-capacity
+            st.session_state.server_load += accepted_requests
+        else:
+            add_log("Server max capacity reached. Dropping packets.", "server")
+    
     else:
         st.info("Attacker is Idle.")
-        # This logic is now handled by the server column
-        # if st.session_state.server_status == "🔥 UNDER ATTACK" and st.session_state.server_load == 0:
-        #      st.session_state.server_status = "✅ Idle"
+        if st.session_state.attacker_blocked:
+            if st.button("Reset Block (Simulate New IP)"):
+                st.session_state.attacker_blocked = False
+                add_log("Attacker is using a new IP.", "attack")
 
 
-# --- 2. Server Column ---
+# --- 2. Server & Defenses Column ---
 with col_server:
-    st.header(f"🖥️ Server (Capacity: {SERVER_CAPACITY})")
+    st.header(f"🖥️ Server & Defenses")
     
     # Server Status & Load
-    load_percent = min(1.0, st.session_state.server_load / SERVER_CAPACITY)
+    load_percent = min(1.0, st.session_state.server_load / st.session_state.server_capacity)
     
     # --- UPDATED STATUS LOGIC ---
-    # Check for attack status FIRST
     if st.session_state.attack_running:
         st.session_state.server_status = "🔥 UNDER ATTACK"
         st.error(f"Status: {st.session_state.server_status}")
-    # If no attack, then check load
-    elif load_percent > 0.8:
+    elif load_percent > 0.9:
         st.session_state.server_status = "🆘 Overloaded"
         st.error(f"Status: {st.session_state.server_status}")
     elif load_percent > 0.5:
@@ -117,18 +167,32 @@ with col_server:
     else:
         st.session_state.server_status = "✅ Stable" if st.session_state.server_load > 0 else "✅ Idle"
         st.success(f"Status: {st.session_state.server_status}")
-    # --- END UPDATED STATUS LOGIC ---
 
-
-    st.markdown(f"**Current Load:** `{st.session_state.server_load}` / `{SERVER_CAPACITY}`")
+    st.markdown(f"**Current Load:** `{st.session_state.server_load}` / `{st.session_state.server_capacity}`")
     st.progress(load_percent)
 
-    # Server Logs
-    st.subheader("Server Logs")
-    log_placeholder = st.empty()
-    with log_placeholder.container(height=300):
-        for log in st.session_state.server_logs:
-            st.markdown(log, unsafe_allow_html=True)
+    # Live Chart
+    st.subheader("Live Load Monitor")
+    new_data = pd.DataFrame({
+        'Time': [st.session_state.simulation_time], 
+        'Server Load': [st.session_state.server_load], 
+        'Capacity': [st.session_state.server_capacity]
+    })
+    st.session_state.load_history = pd.concat([st.session_state.load_history, new_data], ignore_index=True)
+    # Keep history from getting too long
+    if len(st.session_state.load_history) > 50:
+        st.session_state.load_history = st.session_state.load_history.iloc[-50:]
+    
+    st.line_chart(st.session_state.load_history.set_index('Time'))
+
+    # Defense Panel
+    st.subheader("🛡️ Defense Panel")
+    st.session_state.rate_limiting_enabled = st.toggle("Enable Rate Limiting (Firewall)", value=st.session_state.rate_limiting_enabled)
+    st.session_state.auto_scaling_enabled = st.toggle("Enable Cloud Auto-Scaling", value=st.session_state.auto_scaling_enabled)
+    
+    if st.button("🚨 BLOCK ATTACKER IP 🚨"):
+        st.session_state.attacker_blocked = True
+        add_log("Firewall rule added: Attacker IP BLOCKED.", "defense")
 
 # --- 3. Authentic User Column ---
 with col_user:
@@ -141,8 +205,8 @@ with col_user:
         login_button = st.form_submit_button("Attempt Login")
 
     if login_button:
-        # Check if server has capacity for one more request
-        if st.session_state.server_load + 1 <= SERVER_CAPACITY:
+        # Check if server has capacity
+        if st.session_state.server_load + 1 <= st.session_state.server_capacity:
             st.session_state.server_load += 1
             add_log("Processing valid login request...", "user")
             st.session_state.user_message = "Logging in... server is processing."
@@ -151,7 +215,7 @@ with col_user:
             time.sleep(REQUEST_PROCESSING_TIME * 5) # Give login a bit more time
             
             # Check if server *still* has capacity (it might have filled up)
-            if st.session_state.server_load > SERVER_CAPACITY:
+            if st.session_state.server_load > st.session_state.server_capacity:
                  st.session_state.user_message = "❌ Login Failed! Server timed out (Error 503)."
                  add_log("Login request timed out due to high load.", "server")
             else:
@@ -160,7 +224,6 @@ with col_user:
             
             # User logs out, freeing up the slot
             st.session_state.server_load = max(0, st.session_state.server_load - 1)
-
         else:
             # Server is at full capacity
             add_log("Connection attempt from user failed. Server busy.", "server")
@@ -174,10 +237,21 @@ with col_user:
     else:
         st.info(st.session_state.user_message)
 
+    # Server Logs
+    st.subheader("Server Logs")
+    log_placeholder = st.empty()
+    with log_placeholder.container(height=300):
+        for log in st.session_state.server_logs:
+            st.markdown(log, unsafe_allow_html=True)
+
+
 # --- Simulation Loop Control ---
 
 # Simulate the server processing its queue
 process_server_load()
+
+# Increment simulation time for the chart
+st.session_state.simulation_time += 1
 
 # Add a small delay and rerun to create the "live" effect
 time.sleep(0.5)
